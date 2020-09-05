@@ -3,6 +3,7 @@ import re
 import json
 import logging
 import subprocess
+import jieba
 
 from lunr import lunr
 
@@ -91,7 +92,7 @@ class SearchIndex:
                 loc=abs_url + toc_item.url
             )
 
-    def generate_search_index(self):
+    def generate_search_index_old(self):
         """python to json conversion"""
         page_dicts = {
             'docs': self._entries,
@@ -127,6 +128,47 @@ class SearchIndex:
 
         return data
 
+    def generate_search_index(self):
+        """python to json conversion"""
+        page_dicts = {
+            'docs': self._entries,
+            'config': self.config
+        }
+        for doc in page_dicts['docs']: # 调用jieba的cut接口生成分词库，过滤重复词，过滤空格
+            tokens = list(set([token.lower() for token in jieba.cut_for_search(doc['title'].replace('\n', ''), True)]))
+            if '' in tokens:
+                tokens.remove('')
+            doc['title_tokens'] = tokens
+
+            tokens = list(set([token.lower() for token in jieba.cut_for_search(doc['text'].replace('\n', ''), True)]))
+            if '' in tokens:
+                tokens.remove('')
+            doc['text_tokens'] = tokens
+
+        data = json.dumps(page_dicts, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+
+        if self.config['prebuild_index']:
+            try:
+                script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'prebuild-index.js')
+                p = subprocess.Popen(
+                    ['node', script_path],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                idx, err = p.communicate(data.encode('utf-8'))
+                if not err:
+                    idx = idx.decode('utf-8') if hasattr(idx, 'decode') else idx
+                    page_dicts['index'] = json.loads(idx)
+                    data = json.dumps(page_dicts, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+                    log.debug('Pre-built search index created successfully.')
+                else:
+                    log.warning('Failed to pre-build search index. Error: {}'.format(err))
+            except (OSError, IOError, ValueError) as e:
+                log.warning('Failed to pre-build search index. Error: {}'.format(e))
+
+        return data
+    
     def strip_tags(self, html):
         """strip html tags from data"""
         s = HTMLStripper()

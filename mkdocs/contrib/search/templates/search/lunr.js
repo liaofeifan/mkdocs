@@ -1334,9 +1334,10 @@ lunr.Pipeline.registerFunction(lunr.stopWordFilter, 'stopWordFilter')
  * @returns {lunr.Token}
  * @see lunr.Pipeline
  */
+
 lunr.trimmer = function (token) {
   return token.update(function (s) {
-    return s.replace(/^\W+/, '').replace(/\W+$/, '')
+    return s.replace(/^\s+/, '').replace(/\s+$/, '')
   })
 }
 
@@ -2476,9 +2477,7 @@ lunr.Builder.prototype.add = function (doc, attributes) {
     var fieldName = fields[i],
         extractor = this._fields[fieldName].extractor,
         field = extractor ? extractor(doc) : doc[fieldName],
-        tokens = this.tokenizer(field, {
-          fields: [fieldName]
-        }),
+        tokens = doc[fieldName + '_tokens'],
         terms = this.pipeline.run(tokens),
         fieldRef = new lunr.FieldRef (docRef, fieldName),
         fieldTerms = Object.create(null)
